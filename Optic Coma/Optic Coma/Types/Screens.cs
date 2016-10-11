@@ -46,7 +46,7 @@ namespace Optic_Coma
         Vector2 enterButtonPos;
         Texture2D titleGraphic;
         sTitleFlicker titleFlicker;
-
+        Texture2D bg;
         public override void LoadContent()
         {
             base.LoadContent();
@@ -60,6 +60,8 @@ namespace Optic_Coma
 
             enterButtonPos = new Vector2(ScreenManager.Instance.Dimensions.X / 2 - enterButtonTexture.Width / 2,
                                          ScreenManager.Instance.Dimensions.Y / 2 - enterButtonTexture.Height / 8);
+
+            bg = content.Load<Texture2D>("starsbg");
         }
 
         public override void UnloadContent()
@@ -75,23 +77,112 @@ namespace Optic_Coma
 
         public override void Draw(SpriteBatch spriteBatch)
         {
+            #region background image scaling for screen sizes
+            if (Foundation.isFullScreen) {
+                if ((Foundation.ScreenWidth - bg.Width) > (Foundation.ScreenHeight - bg.Height)) {
+                    spriteBatch.Draw
+                    (
+                        bg,
+                        new Rectangle(0,0, Foundation.ScreenWidth, Foundation.ScreenHeight * Foundation.ScreenHeight / bg.Height), //scale horizontally
+                        null,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        SpriteEffects.None,
+                        ScreenManager.Instance.BGLayer
+                    );
+                }
+                else if ((Foundation.ScreenWidth - bg.Width) < (Foundation.ScreenHeight - bg.Height))
+                {
+                    spriteBatch.Draw
+                    (
+                        bg,
+                        new Rectangle(0,0, Foundation.ScreenWidth * Foundation.ScreenWidth / bg.Width, Foundation.ScreenHeight), //scale vertically
+                        null,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        SpriteEffects.None,
+                        ScreenManager.Instance.BGLayer
+                    );
+                }
+                else
+                {
+                    spriteBatch.Draw
+                    (
+                        bg,
+                        new Rectangle(0,0, Foundation.ScreenWidth, Foundation.ScreenHeight),
+                        null,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        SpriteEffects.None,
+                        ScreenManager.Instance.BGLayer
+                    );
+                }
+            }
+            else
+            {
+                spriteBatch.Draw
+                (
+                    bg,
+                    new Rectangle(0, 0, bg.Width, bg.Height),
+                    null,
+                    Color.White,
+                    0f,
+                    Vector2.Zero,
+                    SpriteEffects.None,
+                    ScreenManager.Instance.BGLayer
+                );
+            }
+            #endregion
+
+            spriteBatch.Draw
+            (
+                bg,
+                Vector2.Zero,
+                null,
+                Color.White,
+                0,
+                Vector2.Zero,
+                1,
+                SpriteEffects.None,
+                ScreenManager.Instance.BGLayer
+            );
             titleFlicker.Draw(spriteBatch, new Vector2((ScreenManager.Instance.Dimensions.X - 822) / 2, 20));
+            //We're making our button! Woo!
             btnEnterGame.Draw
             (
+                //We already defined this thing.
                 enterButtonTexture,
+                //Spritebatch is love, spritebatch is life.
                 spriteBatch,
+                //Our event! It passes a method located in ScreenManager.cs. Note the instance - it's a singleton, and remember
+                //don't be a simpleton, use instance for singletons!
                 ScreenManager.Instance.MenuKey_OnPress,
+                //Here's where we want to put our button.
                 enterButtonPos,
+                //Golly gee, I hope it's Rock Salt.
                 buttonFont,
+                //What do we want it to say?
                 "Enter Game",
+                //What color is the text?
                 Color.Black
             );
         }
     }
     class InGameScreen : BaseScreen
     {
-        //int enemySpawnIncrement = 750;
-        // int timeSinceLastEnemy = 0;
+        [XmlIgnore]
+        Type type;
+        public InGameScreen()
+        {
+            type = GetType();
+        }
+
+
+        List<Vector2> goodTiles = new List<Vector2>();
+
         #region fields
         public bool IsPaused = false;
 
@@ -110,10 +201,19 @@ namespace Optic_Coma
         Player player;
         Vector2 playerPositionToSave;
 
+        List<Enemy> enemies = new List<Enemy>();
+
+        TileSystem tileSystem;
+
         Texture2D flashLightTexture;
         Texture2D playerTexture;
+        Texture2D enemyTexture;
+        Texture2D floorTexture;
         Vector2 playerPos;
+        Vector2 enemyPos;
         string playerPath = "player";
+        string enemyPath = "enemy";
+        string flashPath = "flashlight";
 
         Texture2D buttonSheet;
         private Button pauseButton;
@@ -137,19 +237,33 @@ namespace Optic_Coma
         public override void LoadContent()
         {
             IsPaused = false;
-            left = new Vector2(screenWidth - 200, 0);
-            middle = new Vector2(screenWidth / 2 - 16, 0);
-            right = new Vector2(200 - 32, 0);
             
-            //enemies.Capacity = 0;
             base.LoadContent();
-            
+            for (int i = 10; i < 20; i++)
+            {
+                for (int j = 3; j < 5; j++)
+                {
+                    goodTiles.Add(new Vector2(i, j));
+                }
+            }
+
+            for (int i = 5; i < 7; i++)
+            {
+                for (int j = 10; j < 25; j++)
+                {
+                    goodTiles.Add(new Vector2(i, j));
+                }
+            }
+
+            tileSystem = new TileSystem(4, 4);
+
             music = content.Load<SoundEffect>("samplemusic");
             musicInstance = music.CreateInstance();
             musicInstance.IsLooped = true;
             musicInstance.Volume = musicVolume;
             //musicInstance.Play();
 
+            #region buttons
             buttonSheet = content.Load<Texture2D>("buttonSheet");
             pauseButton = new Button();
             pauseButtonPos = Vector2.Zero;
@@ -166,14 +280,26 @@ namespace Optic_Coma
             btnFullscreen = new Button();
             fullButtonPos = new Vector2(ScreenManager.Instance.Dimensions.X / 2 - buttonSheet.Width / 2,
                                         ScreenManager.Instance.Dimensions.Y / 2 + 64 - 128);
-
-            flashLightTexture = content.Load<Texture2D>("flashlight");
+            #endregion
+            #region entities
+            floorTexture = content.Load<Texture2D>("floorSheet");
+            flashLightTexture = content.Load<Texture2D>(flashPath);
             playerTexture = content.Load<Texture2D>(playerPath);
+            enemyTexture = content.Load<Texture2D>(enemyPath);
 
             playerPos = new Vector2(ScreenManager.Instance.Dimensions.X / 2 - playerTexture.Width / 2,
                                      ScreenManager.Instance.Dimensions.Y / 2 - playerTexture.Height / 8);
 
+            enemyPos = new Vector2(ScreenManager.Instance.Dimensions.X / 4 - playerTexture.Width / 2,
+                                     ScreenManager.Instance.Dimensions.Y / 4 - playerTexture.Height / 8);
+
             player = new Player(playerTexture, playerPos, flashLightTexture);
+
+            enemies.Add(new Enemy(enemyTexture, enemyPos));
+            enemies.Add(new Enemy(enemyTexture, new Vector2(ScreenManager.Instance.Dimensions.X - enemyPos.X, ScreenManager.Instance.Dimensions.X - enemyPos.Y)));
+            #endregion
+
+
         }
         public override void UnloadContent()
         {
@@ -253,11 +379,11 @@ namespace Optic_Coma
                 #endregion
 
                 player.Update();
+                foreach (Enemy enemy in enemies)
+                {
+                    enemy.Update();
+                }
                 base.Update(gameTime);
-            }
-            else
-            {
-
             }
         }
         public override void Draw(SpriteBatch spriteBatch)
@@ -265,13 +391,12 @@ namespace Optic_Coma
             #region when not paused
             if (!IsPaused)
             {
-                spriteBatch.DrawString(scoreDisplay, "" + playerScore, new Vector2(10, 650), Color.Black);
-
-                //foreach (Enemy enemy in enemies)
+                foreach (Enemy enemy in enemies)
                 {
-                    //enemy.Draw(spriteBatch);
+                    enemy.Draw(spriteBatch);
                 }
                 player.Draw(spriteBatch, buttonFont);
+                tileSystem.Draw(floorTexture, spriteBatch, goodTiles);
                 pauseButton.Draw
                 (
                     buttonSheet,

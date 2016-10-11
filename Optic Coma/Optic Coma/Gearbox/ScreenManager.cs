@@ -7,7 +7,7 @@ namespace Optic_Coma
 {
     public class ScreenManager
     {
-        public float ButtonLayer = 1f, BGLayer = 0.1f, MGLayer = 0.3f, EntityLayer = 0.2f, FlashlightLayer = 0.19f, FGLayer = 0.4f; 
+        public float TileLayer = 0.9f, ButtonLayer = 0.1f, ButtonTextLayer = 0.05f, BGLayer = 1f, MGLayer = 0.5f, EntityLayer = 0.6f, FlashlightLayer = 0.61f, FGLayer = 0.4f; 
 
         private KeyboardState oldState;
         ///Create a new instance of screen manager and called it, incidentally, "instance".
@@ -19,10 +19,10 @@ namespace Optic_Coma
 
         public ContentManager Content { private set; get; }
 
-        XmlManager<BaseScreen> xmlBaseScreenManager;
 
         public BaseScreen currentScreen { set; get; }
 
+        //Oh boy it's a singleton
         public static ScreenManager Instance
         {
             get
@@ -41,11 +41,6 @@ namespace Optic_Coma
 
             //Changes the screen to the splash screen upon start up
             currentScreen = new MenuScreen();
-
-            xmlBaseScreenManager = new XmlManager<BaseScreen>();
-            xmlBaseScreenManager.Type = currentScreen.Type;
-            if (currentScreen is InGameScreen)
-                currentScreen = xmlBaseScreenManager.Load("Load/InGameScreen.xml");
 
         }
         public void LoadContent(ContentManager Content)
@@ -88,6 +83,7 @@ namespace Optic_Coma
             }
             else if (currentScreen is InGameScreen)
             {
+                
                 currentScreen.UnloadContent();
                 currentScreen = new MenuScreen();
                 currentScreen.LoadContent();
@@ -110,12 +106,13 @@ namespace Optic_Coma
             if (Foundation.isFullScreen)
             {
                 Foundation.isFullScreen = false;
+                Foundation.graphics.ApplyChanges();
             }
             else
             {
                 Foundation.isFullScreen = true;
+                Foundation.graphics.ApplyChanges();
             }
-            Foundation.graphics.ApplyChanges();
         }
         public Foundation foundation;
         public void ExitKey_OnPress()
